@@ -68,6 +68,13 @@ jobs:
         if: matrix.package_script != ''
         run: bash "${{ matrix.package_script }}"
 
+      - name: Zip macOS .app into a single file
+        if: matrix.target == 'macos'
+        shell: bash
+        run: |
+          cd dist
+          ditto -c -k --keepParent SwiftCopy.app SwiftCopy-macOS.zip
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -75,7 +82,7 @@ jobs:
           path: |
             dist/SwiftCopy
             dist/SwiftCopy.exe
-            dist/SwiftCopy.app
+            dist/SwiftCopy*.zip
             dist/SwiftCopy*.AppImage
             dist/swiftcopy_*.deb
             dist/swiftcopy-*.tar.gz
