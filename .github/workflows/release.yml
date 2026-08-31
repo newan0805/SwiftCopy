@@ -111,16 +111,22 @@ jobs:
         with:
           path: release-assets
 
-      - name: Prune unwanted release assets
+      - name: Collect release files (explicit whitelist)
         shell: bash
         run: |
-          # Remove .app bundles so their internals are never uploaded as assets.
-          find release-assets -type d -name "*.app" -prune -exec rm -rf {} + || true
-          # Remove the loose linux binary (already shipped in .tar.gz / .deb) to avoid
-          # a redundant ~60MB asset and any name collisions.
-          rm -f release-assets/*/SwiftCopy || true
-          echo "Final assets:"
-          find release-assets -type f | sed 's|^|  |'
+          # Flatten only the installer artifacts we want into a clean directory.
+          # We copy by exact known filename, so stray .app internals never make it.
+          mkdir -p release
+          find release-assets -type f \( \
+            -name "SwiftCopy-1.0.0-macOS.dmg" -o \
+            -name "SwiftCopy-macOS.zip" -o \
+            -name "SwiftCopy.exe" -o \
+            -name "swiftcopy_1.0.0_amd64.deb" -o \
+            -name "SwiftCopy-x86_64.AppImage" -o \
+            -name "swiftcopy-1.0.0-linux-x86_64.tar.gz" \
+          \) -exec cp {} release/ \; || true
+          echo "Files to release:"
+          ls -la release/
 
       - name: Create or update GitHub Release
         uses: softprops/action-gh-release@v2
@@ -131,13 +137,9 @@ jobs:
             ## SwiftCopy Release ${{ steps.tag.outputs.tag }}
 
             ### Installers
-            - **Windows:** `SwiftCopy.exe` (or Inno Setup installer if built locally)
-            - **macOS:** `SwiftCopy.app` + `SwiftCopy-1.0.0-macOS.dmg`
-            - **Linux:** `swiftcopy_1.0.0_amd64.deb`, `SwiftCopy-x86_64.AppImage`, `swiftcopy-*.tar.gz`
+            - **Windows:** `SwiftCopy.exe`
+            - **macOS:** `SwiftCopy-1.0.0-macOS.dmg` or `SwiftCopy-macOS.zip`
+            - **Linux:** `swiftcopy_1.0.0_amd64.deb`, `SwiftCopy-x86_64.AppImage`, `swiftcopy-1.0.0-linux-x86_64.tar.gz`
 
             See [RELEASE_NOTES.md](RELEASE_NOTES.md) for details.
-          files: |
-            release-assets/swiftcopy-ubuntu-latest/**
-            release-assets/swiftcopy-windows-latest/**
-            release-assets/swiftcopy-macos-latest/**
-          fail_on_unmatched_files: false
+          files: release/*
