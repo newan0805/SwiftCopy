@@ -111,6 +111,17 @@ jobs:
         with:
           path: release-assets
 
+      - name: Prune unwanted release assets
+        shell: bash
+        run: |
+          # Remove .app bundles so their internals are never uploaded as assets.
+          find release-assets -type d -name "*.app" -prune -exec rm -rf {} + || true
+          # Remove the loose linux binary (already shipped in .tar.gz / .deb) to avoid
+          # a redundant ~60MB asset and any name collisions.
+          rm -f release-assets/*/SwiftCopy || true
+          echo "Final assets:"
+          find release-assets -type f | sed 's|^|  |'
+
       - name: Create or update GitHub Release
         uses: softprops/action-gh-release@v2
         with:
