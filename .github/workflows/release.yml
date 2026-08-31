@@ -99,11 +99,10 @@ jobs:
             echo "tag=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Download all build artifacts
+      - name: Download all build artifacts (each to its own folder)
         uses: actions/download-artifact@v4
         with:
           path: release-assets
-          merge-multiple: true
 
       - name: Create or update GitHub Release
         uses: softprops/action-gh-release@v2
@@ -119,5 +118,8 @@ jobs:
             - **Linux:** `swiftcopy_1.0.0_amd64.deb`, `SwiftCopy-x86_64.AppImage`, `swiftcopy-*.tar.gz`
 
             See [RELEASE_NOTES.md](RELEASE_NOTES.md) for details.
-          files: release-assets/**
+          files: |
+            release-assets/swiftcopy-ubuntu-latest/**
+            release-assets/swiftcopy-windows-latest/**
+            release-assets/swiftcopy-macos-latest/**
           fail_on_unmatched_files: false
