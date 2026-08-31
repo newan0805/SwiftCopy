@@ -1,0 +1,123 @@
+# Builds SwiftCopy installers on all three platforms and attaches them to a
+# GitHub Release. Trigger by:
+#   1. Pushing a tag matching v*  (e.g. git tag v1.0.0 && git push --tags)
+#   2. Running the "Create Release" workflow_dispatch and picking a tag
+
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing git tag to release (e.g. v1.0.0)"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: linux
+            package_script: deployment/linux/build_deb.sh
+          - os: windows-latest
+            target: windows
+          - os: macos-latest
+            target: macos
+            package_script: deployment/macos/build_dmg.sh
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install build dependencies
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller pillow
+
+      - name: Install app runtime dependencies
+        shell: bash
+        run: |
+          if [ -f requirements.txt ]; then python -m pip install -r requirements.txt; fi
+
+      - name: Generate icons from app icon
+        shell: bash
+        run: python build_configs/make_icons.py
+
+      - name: Build executable
+        shell: bash
+        run: python build_configs/build.py ${{ matrix.target }}
+
+      - name: Build installers / package
+        shell: bash
+        if: matrix.package_script != ''
+        run: bash "${{ matrix.package_script }}"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: swiftcopy-${{ matrix.os }}
+          path: |
+            dist/SwiftCopy
+            dist/SwiftCopy.exe
+            dist/SwiftCopy.app
+            dist/SwiftCopy*.AppImage
+            dist/swiftcopy_*.deb
+            dist/swiftcopy-*.tar.gz
+            dist/*.dmg
+          if-no-files-found: ignore
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve release tag
+        id: tag
+        run: |
+          if [ -n "${{ github.event.inputs.tag }}" ]; then
+            echo "tag=${{ github.event.inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Create or update GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: SwiftCopy ${{ steps.tag.outputs.tag }}
+          body: |
+            ## SwiftCopy Release ${{ steps.tag.outputs.tag }}
+
+            ### Installers
+            - **Windows:** `SwiftCopy.exe` (or Inno Setup installer if built locally)
+            - **macOS:** `SwiftCopy.app` + `SwiftCopy-1.0.0-macOS.dmg`
+            - **Linux:** `swiftcopy_1.0.0_amd64.deb`, `SwiftCopy-x86_64.AppImage`, `swiftcopy-*.tar.gz`
+
+            See [RELEASE_NOTES.md](RELEASE_NOTES.md) for details.
+          files: release-assets/**
+          fail_on_unmatched_files: false
